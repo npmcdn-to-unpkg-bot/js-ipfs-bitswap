@@ -1,8 +1,8 @@
 'use strict'
 
-const bl = require('bl')
 const debug = require('debug')
-const lps = require('length-prefixed-stream')
+const lp = require('pull-length-prefixed')
+const pull = require('pull-stream')
 
 const Message = require('../message')
 const cs = require('../constants')
@@ -49,30 +49,27 @@ module.exports = class Network {
   }
 
   _onConnection (conn) {
-    const decode = lps.decode()
-    conn.pipe(decode).pipe(bl((err, data) => {
-      conn.end()
-      if (err) {
-        return this.bitswap._receiveError(err)
-      }
-      let msg
-      try {
-        msg = Message.fromProto(data)
-      } catch (err) {
-        return this.bitswap._receiveError(err)
-      }
-      conn.getPeerInfo((err, peerInfo) => {
+    pull(
+      conn,
+      lp.decode(),
+      pull.collect((err, data) => {
         if (err) {
           return this.bitswap._receiveError(err)
         }
-        this.bitswap._receiveMessage(peerInfo.id, msg)
+        let msg
+        try {
+          msg = Message.fromProto(data)
+        } catch (err) {
+          return this.bitswap._receiveError(err)
+        }
+        conn.getPeerInfo((err, peerInfo) => {
+          if (err) {
+            return this.bitswap._receiveError(err)
+          }
+          this.bitswap._receiveMessage(peerInfo.id, msg)
+        })
       })
-    }))
-
-    conn.on('error', (err) => {
-      this.bitswap._receiveError(err)
-      conn.end()
-    })
+    )
   }
 
   _onPeerMux (peerInfo) {
@@ -114,13 +111,11 @@ module.exports = class Network {
         return done(err)
       }
 
-      conn.once('error', (err) => done(err))
-      conn.once('finish', done)
-
-      const encode = lps.encode()
-      encode.pipe(conn)
-      encode.write(msg.toProto())
-      encode.end()
+      pull(
+        pull.values([msg.toProto()]),
+        lp.encode(),
+        conn
+      )
     })
   }
 }

@@ -7,9 +7,9 @@ const _ = require('lodash')
 const Block = require('ipfs-block')
 const parallel = require('async/parallel')
 const eachLimit = require('async/eachLimit')
-const each = require('async/each')
 const series = require('async/series')
 const eachSeries = require('async/eachSeries')
+const pull = require('pull-stream')
 
 const Message = require('../../src/message')
 const Engine = require('../../src/decision/engine')
@@ -20,7 +20,7 @@ module.exports = (repo) => {
   function newEngine (id, done) {
     repo.create(id, (err, repo) => {
       if (err) return done(err)
-      const engine = new Engine(repo.datastore, mockNetwork())
+      const engine = new Engine(repo.blockstore, mockNetwork())
       engine.start()
 
       done(null, {
@@ -133,64 +133,66 @@ module.exports = (repo) => {
       repo.create('p', (err, repo) => {
         expect(err).to.not.exist
 
-        each(alphabet, (letter, cb) => {
-          const block = new Block(letter)
-          repo.datastore.put(block, cb)
-        }, (err) => {
-          expect(err).to.not.exist
+        pull(
+          pull.values(alphabet),
+          pull.map((l) => new Block(l)),
+          repo.blockstore.putStream(),
+          pull.onEnd((err) => {
+            expect(err).to.not.exist
 
-          const partnerWants = (e, keys, p, cb) => {
-            const add = new Message(false)
-            keys.forEach((letter, i) => {
-              const block = new Block(letter)
-              add.addEntry(block.key, Math.pow(2, 32) - 1 - i)
-            })
-
-            e.messageReceived(p, add, cb)
-          }
-
-          const partnerCancels = (e, keys, p, cb) => {
-            const cancels = new Message(false)
-            keys.forEach((k) => {
-              const block = new Block(k)
-              cancels.cancel(block.key)
-            })
-
-            e.messageReceived(p, cancels, cb)
-          }
-
-          eachSeries(_.range(numRounds), (i, cb) => {
-            eachSeries(testCases, (testcase, innerCb) => {
-              const set = testcase[0]
-              const cancels = testcase[1]
-              const keeps = _.difference(set, cancels)
-
-              const messageToString = (m) => {
-                return Array.from(m[1].blocks.values())
-                  .map((b) => b.data.toString())
-              }
-              const stringifyMessages = (messages) => {
-                return _.flatten(messages.map(messageToString))
-              }
-
-              const network = mockNetwork(keeps.length, (res) => {
-                const msgs = stringifyMessages(res.messages)
-                expect(msgs).to.be.eql(keeps)
-                innerCb()
+            const partnerWants = (e, keys, p, cb) => {
+              const add = new Message(false)
+              keys.forEach((letter, i) => {
+                const block = new Block(letter)
+                add.addEntry(block.key, Math.pow(2, 32) - 1 - i)
               })
 
-              const e = new Engine(repo.datastore, network)
-              e.start()
-              const partner = PeerId.create({bits: 64})
-              series([
-                (c) => partnerWants(e, set, partner, c),
-                (c) => partnerCancels(e, cancels, partner, c)
-              ], (err) => {
-                if (err) throw err
+              e.messageReceived(p, add, cb)
+            }
+
+            const partnerCancels = (e, keys, p, cb) => {
+              const cancels = new Message(false)
+              keys.forEach((k) => {
+                const block = new Block(k)
+                cancels.cancel(block.key)
               })
-            }, cb)
-          }, done)
-        })
+
+              e.messageReceived(p, cancels, cb)
+            }
+
+            eachSeries(_.range(numRounds), (i, cb) => {
+              eachSeries(testCases, (testcase, innerCb) => {
+                const set = testcase[0]
+                const cancels = testcase[1]
+                const keeps = _.difference(set, cancels)
+
+                const messageToString = (m) => {
+                  return Array.from(m[1].blocks.values())
+                    .map((b) => b.data.toString())
+                }
+                const stringifyMessages = (messages) => {
+                  return _.flatten(messages.map(messageToString))
+                }
+
+                const network = mockNetwork(keeps.length, (res) => {
+                  const msgs = stringifyMessages(res.messages)
+                  expect(msgs).to.be.eql(keeps)
+                  innerCb()
+                })
+
+                const e = new Engine(repo.blockstore, network)
+                e.start()
+                const partner = PeerId.create({bits: 64})
+                series([
+                  (c) => partnerWants(e, set, partner, c),
+                  (c) => partnerCancels(e, cancels, partner, c)
+                ], (err) => {
+                  if (err) throw err
+                })
+              }, cb)
+            }, done)
+          })
+        )
       })
     })
   })

@@ -50,7 +50,7 @@ exports.mockNetwork = (calls, done) => {
 exports.createMockNet = (repo, count, cb) => {
   map(_.range(count), (i, cb) => repo.create(`repo-${i}`, (err, res) => {
     if (err) return cb(err)
-    cb(null, res.datastore)
+    cb(null, res.blockstore)
   }), (err, stores) => {
     if (err) return cb(err)
 
@@ -146,7 +146,7 @@ exports.genBitswapNetwork = (n, callback) => {
   // create every BitSwap
   function createBitswaps () {
     netArray.forEach((net) => {
-      net.bitswap = new Bitswap(net.peerInfo, net.libp2p, net.repo.datastore, net.peerBook)
+      net.bitswap = new Bitswap(net.peerInfo, net.libp2p, net.repo.blockstore, net.peerBook)
     })
     establishLinks()
   }

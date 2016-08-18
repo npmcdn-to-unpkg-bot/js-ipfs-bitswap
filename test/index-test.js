@@ -2,7 +2,6 @@
 /* eslint max-nested-callbacks: ["error", 8]*/
 'use strict'
 
-const map = require('async/map')
 const eachSeries = require('async/eachSeries')
 const waterfall = require('async/waterfall')
 const each = require('async/each')
@@ -12,6 +11,7 @@ const PeerId = require('peer-id')
 const Block = require('ipfs-block')
 const mh = require('multihashes')
 const PeerBook = require('peer-book')
+const pull = require('pull-stream')
 
 const Message = require('../src/message')
 const Bitswap = require('../src')
@@ -37,7 +37,7 @@ module.exports = (repo) => {
       beforeEach((done) => {
         repo.create('hello', (err, r) => {
           if (err) return done(err)
-          store = r.datastore
+          store = r.blockstore
           done()
         })
       })
@@ -65,14 +65,16 @@ module.exports = (repo) => {
           expect(bs.blocksRecvd).to.be.eql(2)
           expect(bs.dupBlocksRecvd).to.be.eql(0)
 
-          map([b1, b1],
-            (val, cb) => store.get(val.key, cb),
-            (err, res) => {
+          pull(
+            pull.values([b1, b1]),
+            pull.map((block) => store.getStream(block.key)),
+            pull.flatten(),
+            pull.collect((err, blocks) => {
               if (err) return done(err)
 
-              expect(res).to.be.eql([b1, b1])
+              expect(blocks).to.be.eql([b1, b1])
               done()
-            }
+            })
           )
         })
       })
@@ -136,7 +138,7 @@ module.exports = (repo) => {
       before((done) => {
         repo.create('hello', (err, r) => {
           if (err) return done(err)
-          store = r.datastore
+          store = r.blockstore
           done()
         })
       })
@@ -148,18 +150,23 @@ module.exports = (repo) => {
       it('block exists locally', (done) => {
         const me = PeerId.create({bits: 64})
         const block = makeBlock()
-        store.put(block, (err) => {
-          if (err) throw err
-          const book = new PeerBook()
-          const bs = new Bitswap(me, libp2pMock, store, book)
+        pull(
+          pull.values([block]),
+          store.putStream(),
+          pull.onEnd((err) => {
+            if (err) return done(err)
 
-          bs.getBlock(block.key, (err, res) => {
-            if (err) throw err
+            const book = new PeerBook()
+            const bs = new Bitswap(me, libp2pMock, store, book)
 
-            expect(res).to.be.eql(block)
-            done()
+            bs.getBlock(block.key, (err, res) => {
+              if (err) return done(err)
+
+              expect(res).to.be.eql(block)
+              done()
+            })
           })
-        })
+        )
       })
 
       // Not sure if I understand what is going on here
@@ -260,7 +267,7 @@ module.exports = (repo) => {
         waterfall([
           (cb) => repo.create('world', cb),
           (repo, cb) => {
-            store2 = repo.datastore
+            store2 = repo.blockstore
             bs2 = new Bitswap(other, libp2pMock, store2, new PeerBook())
             utils.applyNetwork(bs2, n2)
             bs2.start()
@@ -299,7 +306,7 @@ module.exports = (repo) => {
       beforeEach((done) => {
         repo.create('hello', (err, r) => {
           if (err) return done(err)
-          store = r.datastore
+          store = r.blockstore
           done()
         })
       })

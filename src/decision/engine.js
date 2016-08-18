@@ -15,8 +15,8 @@ const PeerRequestQueue = require('./peer-request-queue')
 const Ledger = require('./ledger')
 
 module.exports = class Engine {
-  constructor (datastore, network) {
-    this.datastore = datastore
+  constructor (blockstore, network) {
+    this.blockstore = blockstore
     this.network = network
 
     // A list of of ledgers by their partner id
@@ -58,24 +58,26 @@ module.exports = class Engine {
           return cb(true)
         }
 
-        this.datastore.get(nextTask.entry.key, (err, block) => {
-          if (err || !block) {
-            nextTask.done()
-            return cb()
-          }
-
-          cb(null, {
-            peer: nextTask.target,
-            block: block,
-            sent: () => {
+        pull(
+          this.blockstore.getStream(nextTask.entry.key),
+          pull.collect((err, blocks) => {
+            const block = blocks[0]
+            if (err || !block) {
               nextTask.done()
+              return cb()
             }
+
+            cb(null, {
+              peer: nextTask.target,
+              block: block,
+              sent: () => {
+                nextTask.done()
+              }
+            })
           })
-        })
+        )
       }),
-      pull.asyncMap((envelope, cb) => {
-        this._sendBlock(envelope, cb)
-      }),
+      pull.asyncMap(this._sendBlock.bind(this)),
       pull.onEnd(cb)
     )
 
@@ -154,7 +156,7 @@ module.exports = class Engine {
       ledger.wants(entry.key, entry.priority)
 
       // If we already have the block, serve it
-      this.datastore.has(entry.key, (err, exists) => {
+      this.blockstore.has(entry.key, (err, exists) => {
         if (err) {
           log('failed existence check %s', mh.toB58String(entry.key))
         } else if (exists) {

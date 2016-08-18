@@ -3,12 +3,12 @@
 const eachLimit = require('async/eachLimit')
 const series = require('async/series')
 const retry = require('async/retry')
-const parallel = require('async/parallel')
 const debug = require('debug')
 const log = debug('bitswap')
 log.error = debug('bitswap:error')
 const EventEmitter = require('events').EventEmitter
 const mh = require('multihashes')
+const pull = require('pull-stream')
 
 const cs = require('./constants')
 const WantManager = require('./wantmanager')
@@ -16,7 +16,7 @@ const Network = require('./network')
 const decision = require('./decision')
 
 module.exports = class Bitwap {
-  constructor (p, libp2p, datastore, peerBook) {
+  constructor (p, libp2p, blockstore, peerBook) {
     // the ID of the peer to act on behalf of
     this.self = p
 
@@ -24,9 +24,9 @@ module.exports = class Bitwap {
     this.network = new Network(libp2p, peerBook, this)
 
     // local database
-    this.datastore = datastore
+    this.blockstore = blockstore
 
-    this.engine = new decision.Engine(datastore, this.network)
+    this.engine = new decision.Engine(blockstore, this.network)
 
     // handle message sending
     this.wm = new WantManager(this.network)
@@ -91,9 +91,9 @@ module.exports = class Bitwap {
 
   _updateReceiveCounters (block, cb) {
     this.blocksRecvd ++
-    this.datastore.has(block.key, (err, has) => {
+    this.blockstore.has(block.key, (err, has) => {
       if (err) {
-        log('datastore.has error: %s', err.message)
+        log('blockstore.has error: %s', err.message)
         return cb(err)
       }
 
@@ -110,7 +110,11 @@ module.exports = class Bitwap {
   _tryPutBlock (block, times, cb) {
     log('trying to put block %s', block.data.toString())
     retry({times, interval: 400}, (done) => {
-      this.datastore.put(block, done)
+      pull(
+        pull.values([block]),
+        this.blockstore.putStream(),
+        pull.onEnd(done)
+      )
     }, cb)
   }
 
@@ -213,33 +217,22 @@ module.exports = class Bitwap {
     addListeners()
     this.wm.wantBlocks(keys)
 
-    parallel(keys.map((key) => (cb) => {
-      // We don't want to announce looking for blocks
-      // when we might have them ourselves.
-      this.datastore.has(key, (err, exists) => {
-        if (err) {
-          log('error in datastore.has: ', err.message)
-          return cb()
-        }
-
-        if (!exists) {
-          return cb()
-        }
-
-        this.datastore.get(key, (err, res) => {
-          if (err) {
-            log('error in datastore.get: ', err.message)
-          }
-
-          if (!err && res) {
-            finish(mh.toB58String(key), null, res)
-            this.wm.cancelWants([key])
-          }
-
-          cb()
+    pull(
+      pull.values(keys),
+      pull.asyncMap((key, cb) => {
+        this.blockstore.has(key, (err, exists) => {
+          cb(err, [key, exists])
         })
-      })
-    }))
+      }),
+      pull.filter((val) => val[1]),
+      pull.map((val) => this.blockstore.getStream(val[0])),
+      pull.flatten(),
+      pull.through((block) => {
+        finish(mh.toB58String(block.key), null, block)
+        this.wm.cancelWants([block.key])
+      }),
+      pull.drain()
+    )
   }
 
   // removes the given keys from the want list independent of any ref counts
@@ -261,7 +254,7 @@ module.exports = class Bitwap {
 
     this._tryPutBlock(block, 4, (err) => {
       if (err) {
-        log.error('Error writing block to datastore: %s', err.message)
+        log.error('Error writing block to blockstore: %s', err.message)
         return cb(err)
       }
       log('put block: %s', mh.toB58String(block.key))

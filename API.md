@@ -6,7 +6,7 @@
 
 - `id: PeerId`, the id of the local instance.
 - `libp2p: Libp2p`, instance of the local network stack.
-- `datastore: Datastore`, instance of the local database (`IpfsRepo.datastore`)
+- `blockstore: Datastore`, instance of the local database (`IpfsRepo.blockstore`)
 
 Create a new instance.
 
