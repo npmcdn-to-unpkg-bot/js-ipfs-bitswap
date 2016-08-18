@@ -1,7 +1,6 @@
 'use strict'
 
 const bl = require('bl')
-const async = require('async')
 const debug = require('debug')
 const lps = require('length-prefixed-stream')
 
@@ -87,7 +86,7 @@ module.exports = class Network {
   // Connect to the given peer
   connectTo (peerId, cb) {
     log('connecting to %s', peerId.toB58String())
-    const done = (err) => async.setImmediate(() => cb(err))
+    const done = (err) => setImmediate(() => cb(err))
     // NOTE: For now, all this does is ensure that we are
     // connected. Once we have Peer Routing, we will be able
     // to find the Peer
@@ -102,7 +101,7 @@ module.exports = class Network {
   sendMessage (peerId, msg, cb) {
     log('sendMessage to %s', peerId.toB58String())
     log('msg %s', msg.full, msg.wantlist, msg.blocks)
-    const done = (err) => async.setImmediate(() => cb(err))
+    const done = (err) => setImmediate(() => cb(err))
     let peerInfo
     try {
       peerInfo = this.peerBook.getByMultihash(peerId.toBytes())

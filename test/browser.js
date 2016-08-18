@@ -1,6 +1,6 @@
 'use strict'
 
-const async = require('async')
+const eachSeries = require('async/eachSeries')
 const store = require('idb-plus-blob-store')
 const _ = require('lodash')
 const IPFSRepo = require('ipfs-repo')
@@ -29,7 +29,7 @@ function createRepo (id, done) {
 
   dbs.push(id)
 
-  async.eachSeries(repoData, (file, cb) => {
+  eachSeries(repoData, (file, cb) => {
     if (_.startsWith(file.key, 'datastore/')) {
       return cb()
     }

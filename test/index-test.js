@@ -2,7 +2,10 @@
 /* eslint max-nested-callbacks: ["error", 8]*/
 'use strict'
 
-const async = require('async')
+const map = require('async/map')
+const eachSeries = require('async/eachSeries')
+const waterfall = require('async/waterfall')
+const each = require('async/each')
 const _ = require('lodash')
 const expect = require('chai').expect
 const PeerId = require('peer-id')
@@ -62,7 +65,7 @@ module.exports = (repo) => {
           expect(bs.blocksRecvd).to.be.eql(2)
           expect(bs.dupBlocksRecvd).to.be.eql(0)
 
-          async.map([b1, b1],
+          map([b1, b1],
             (val, cb) => store.get(val.key, cb),
             (err, res) => {
               if (err) return done(err)
@@ -116,7 +119,7 @@ module.exports = (repo) => {
           return m
         })
         let i = 0
-        async.eachSeries(others, (other, cb) => {
+        eachSeries(others, (other, cb) => {
           const msg = messages[i]
           i++
           bs._receiveMessage(other, msg, (err) => {
@@ -166,7 +169,7 @@ module.exports = (repo) => {
         const block = makeBlock()
 
         let mockNet
-        async.waterfall([
+        waterfall([
           (cb) => utils.createMockNet(repo, 2, cb),
           (net, cb) => {
             mockNet = net
@@ -218,13 +221,13 @@ module.exports = (repo) => {
             if (id.toHexString() !== other.toHexString()) {
               err = new Error('unkown peer')
             }
-            async.setImmediate(() => cb(err))
+            setImmediate(() => cb(err))
           },
           sendMessage (id, msg, cb) {
             if (id.toHexString() === other.toHexString()) {
               bs2._receiveMessage(me, msg, cb)
             } else {
-              async.setImmediate(() => cb(new Error('unkown peer')))
+              setImmediate(() => cb(new Error('unkown peer')))
             }
           },
           start () {},
@@ -236,13 +239,13 @@ module.exports = (repo) => {
             if (id.toHexString() !== me.toHexString()) {
               err = new Error('unkown peer')
             }
-            async.setImmediate(() => cb(err))
+            setImmediate(() => cb(err))
           },
           sendMessage (id, msg, cb) {
             if (id.toHexString() === me.toHexString()) {
               bs1._receiveMessage(other, msg, cb)
             } else {
-              async.setImmediate(() => cb(new Error('unkown peer')))
+              setImmediate(() => cb(new Error('unkown peer')))
             }
           },
           start () {},
@@ -254,7 +257,7 @@ module.exports = (repo) => {
 
         let store2
 
-        async.waterfall([
+        waterfall([
           (cb) => repo.create('world', cb),
           (repo, cb) => {
             store2 = repo.datastore
@@ -335,7 +338,7 @@ module.exports = (repo) => {
 }
 
 function hasBlocks (msg, store, cb) {
-  async.each(Array.from(msg.blocks.values()), (b, next) => {
+  each(Array.from(msg.blocks.values()), (b, next) => {
     if (!b.cancel) {
       store.has(b.key, next)
     } else {

@@ -1,7 +1,7 @@
 'use strict'
 
 const debug = require('debug')
-const async = require('async')
+const queue = require('async/queue')
 
 const Message = require('../message')
 
@@ -14,7 +14,7 @@ module.exports = class MsgQueue {
     this.network = network
     this.refcnt = 1
 
-    this.queue = async.queue(this.doWork.bind(this), 1)
+    this.queue = queue(this.doWork.bind(this), 1)
     // only start when `run` is called
     this.queue.pause()
   }

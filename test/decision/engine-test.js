@@ -5,7 +5,11 @@ const expect = require('chai').expect
 const PeerId = require('peer-id')
 const _ = require('lodash')
 const Block = require('ipfs-block')
-const async = require('async')
+const parallel = require('async/parallel')
+const eachLimit = require('async/eachLimit')
+const each = require('async/each')
+const series = require('async/series')
+const eachSeries = require('async/eachSeries')
 
 const Message = require('../../src/message')
 const Engine = require('../../src/decision/engine')
@@ -32,7 +36,7 @@ module.exports = (repo) => {
     })
 
     it('consistent accounting', (done) => {
-      async.parallel([
+      parallel([
         (cb) => newEngine('Ernie', cb),
         (cb) => newEngine('Bert', cb)
       ], (err, res) => {
@@ -41,7 +45,7 @@ module.exports = (repo) => {
         const sender = res[0]
         const receiver = res[1]
 
-        async.eachLimit(_.range(1000), 100, (i, cb) => {
+        eachLimit(_.range(1000), 100, (i, cb) => {
           const m = new Message(false)
           const content = `this is message ${i}`
           m.addBlock(new Block(content))
@@ -80,7 +84,7 @@ module.exports = (repo) => {
     })
 
     it('peer is added to peers when message receiver or sent', (done) => {
-      async.parallel([
+      parallel([
         (cb) => newEngine('sf', cb),
         (cb) => newEngine('sea', cb)
       ], (err, res) => {
@@ -129,7 +133,7 @@ module.exports = (repo) => {
       repo.create('p', (err, repo) => {
         expect(err).to.not.exist
 
-        async.each(alphabet, (letter, cb) => {
+        each(alphabet, (letter, cb) => {
           const block = new Block(letter)
           repo.datastore.put(block, cb)
         }, (err) => {
@@ -155,8 +159,8 @@ module.exports = (repo) => {
             e.messageReceived(p, cancels, cb)
           }
 
-          async.eachSeries(_.range(numRounds), (i, cb) => {
-            async.eachSeries(testCases, (testcase, innerCb) => {
+          eachSeries(_.range(numRounds), (i, cb) => {
+            eachSeries(testCases, (testcase, innerCb) => {
               const set = testcase[0]
               const cancels = testcase[1]
               const keeps = _.difference(set, cancels)
@@ -178,7 +182,7 @@ module.exports = (repo) => {
               const e = new Engine(repo.datastore, network)
               e.start()
               const partner = PeerId.create({bits: 64})
-              async.series([
+              series([
                 (c) => partnerWants(e, set, partner, c),
                 (c) => partnerCancels(e, cancels, partner, c)
               ], (err) => {

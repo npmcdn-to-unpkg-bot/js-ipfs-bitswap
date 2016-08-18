@@ -4,7 +4,9 @@
 
 const expect = require('chai').expect
 const utils = require('../utils')
-const async = require('async')
+const series = require('async/series')
+const parallel = require('async/parallel')
+const each = require('async/each')
 const _ = require('lodash')
 const Block = require('ipfs-block')
 const Buffer = require('safe-buffer').Buffer
@@ -23,15 +25,15 @@ describe('gen Bitswap network', function () {
         return new Block(b)
       })
 
-      async.series([
+      series([
         (cb) => {
-          async.parallel(blocks.map((b) => (cb) => {
+          parallel(blocks.map((b) => (cb) => {
             node.bitswap.hasBlock(b, cb)
           }), cb)
         },
         (cb) => {
-          async.each(_.range(100), (i, cb) => {
-            async.parallel(blocks.map((b) => (cb) => {
+          each(_.range(100), (i, cb) => {
+            parallel(blocks.map((b) => (cb) => {
               node.bitswap.getBlock(b.key, (err, res) => {
                 expect(err).to.not.exist
                 expect(res).to.be.eql(b)
@@ -80,17 +82,17 @@ describe('gen Bitswap network', function () {
 
             const d = (new Date()).getTime()
 
-            async.parallel(_.map(nodeArr, (node, i) => (callback) => {
+            parallel(_.map(nodeArr, (node, i) => (callback) => {
               node.bitswap.start()
-              async.parallel([
+              parallel([
                 (finish) => {
-                  async.parallel(_.range(blockFactor).map((j) => (cb) => {
+                  parallel(_.range(blockFactor).map((j) => (cb) => {
                     // console.log('has node:%s block %s', i, i * blockFactor + j)
                     node.bitswap.hasBlock(blocks[i * blockFactor + j], cb)
                   }), finish)
                 },
                 (finish) => {
-                  async.parallel(_.map(blocks, (b, j) => (cb) => {
+                  parallel(_.map(blocks, (b, j) => (cb) => {
                     node.bitswap.getBlock(b.key, (err, res) => {
                       // console.log('node:%s got block: %s', i, j)
                       expect(err).to.not.exist
@@ -107,13 +109,13 @@ describe('gen Bitswap network', function () {
             })
           }
 
-          async.series(
+          series(
             _.range(2).map((i) => (cb) => round(i, cb)),
             (err) => {
               // setTimeout is used to avoid closing the TCP socket while spdy is
               // still sending a ton of signalling data
               setTimeout(() => {
-                async.parallel(nodeArr.map((node) => (cb) => {
+                parallel(nodeArr.map((node) => (cb) => {
                   node.bitswap.stop()
                   node.libp2p.stop(cb)
                 }), (err2) => {

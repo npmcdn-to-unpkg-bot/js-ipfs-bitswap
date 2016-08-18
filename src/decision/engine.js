@@ -1,7 +1,7 @@
 'use strict'
 
 const debug = require('debug')
-const async = require('async')
+const eachSeries = require('async/eachSeries')
 const mh = require('multihashes')
 const pull = require('pull-stream')
 const generate = require('pull-generate')
@@ -115,11 +115,11 @@ module.exports = class Engine {
 
     this._processBlocks(msg.blocks, ledger)
     log('wantlist', Array.from(msg.wantlist.values()).map((e) => e.toString()))
-    async.eachSeries(
+    eachSeries(
       msg.wantlist.values(),
       this._processWantlist.bind(this, ledger, peerId),
       (err) => {
-        const done = (err) => async.setImmediate(() => cb(err))
+        const done = (err) => setImmediate(() => cb(err))
         if (err) return done(err)
         this._outbox()
         done()
@@ -148,7 +148,7 @@ module.exports = class Engine {
       log('cancel %s', mh.toB58String(entry.key))
       ledger.cancelWant(entry.key)
       this.peerRequestQueue.remove(entry.key, peerId)
-      async.setImmediate(() => cb())
+      setImmediate(() => cb())
     } else {
       log('wants %s - %s', mh.toB58String(entry.key), entry.priority)
       ledger.wants(entry.key, entry.priority)

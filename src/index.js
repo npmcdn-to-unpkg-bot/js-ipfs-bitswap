@@ -1,6 +1,9 @@
 'use strict'
 
-const async = require('async')
+const eachLimit = require('async/eachLimit')
+const series = require('async/series')
+const retry = require('async/retry')
+const parallel = require('async/parallel')
 const debug = require('debug')
 const log = debug('bitswap')
 log.error = debug('bitswap:error')
@@ -64,8 +67,8 @@ module.exports = class Bitwap {
 
       this.wm.cancelWants(keys)
 
-      async.eachLimit(iblocks.values(), 10, (block, next) => {
-        async.series([
+      eachLimit(iblocks.values(), 10, (block, next) => {
+        series([
           (innerCb) => this._updateReceiveCounters(block, (err) => {
             if (err) {
               // ignore, as these have been handled in _updateReceiveCounters
@@ -106,7 +109,7 @@ module.exports = class Bitwap {
 
   _tryPutBlock (block, times, cb) {
     log('trying to put block %s', block.data.toString())
-    async.retry({times, interval: 400}, (done) => {
+    retry({times, interval: 400}, (done) => {
       this.datastore.put(block, done)
     }, cb)
   }
@@ -210,7 +213,7 @@ module.exports = class Bitwap {
     addListeners()
     this.wm.wantBlocks(keys)
 
-    async.parallel(keys.map((key) => (cb) => {
+    parallel(keys.map((key) => (cb) => {
       // We don't want to announce looking for blocks
       // when we might have them ourselves.
       this.datastore.has(key, (err, exists) => {

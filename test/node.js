@@ -6,7 +6,7 @@ const ncp = require('ncp')
 const rimraf = require('rimraf')
 const fs = require('fs-blob-store')
 const testRepoPath = path.join(__dirname, 'test-repo')
-const async = require('async')
+const each = require('async/each')
 
 // book keeping
 const repos = []
@@ -24,7 +24,7 @@ function createRepo (id, done) {
 }
 
 function removeRepos (done) {
-  async.each(repos, (repo, cb) => {
+  each(repos, (repo, cb) => {
     rimraf(repo, cb)
   }, done)
 }
