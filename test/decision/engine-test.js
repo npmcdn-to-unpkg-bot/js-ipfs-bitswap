@@ -161,12 +161,16 @@ module.exports = (repo) => {
               const cancels = testcase[1]
               const keeps = _.difference(set, cancels)
 
-              const network = mockNetwork(keeps.length, (res) => {
-                const msgs = _.flatten(res.messages.map(
-                  (m) => Array.from(m[1].blocks.values())
-                    .map((b) => b.data.toString())
-                ))
+              const messageToString = (m) => {
+                return Array.from(m[1].blocks.values())
+                  .map((b) => b.data.toString())
+              }
+              const stringifyMessages = (messages) => {
+                return _.flatten(messages.map(messageToString))
+              }
 
+              const network = mockNetwork(keeps.length, (res) => {
+                const msgs = stringifyMessages(res.messages)
                 expect(msgs).to.be.eql(keeps)
                 innerCb()
               })

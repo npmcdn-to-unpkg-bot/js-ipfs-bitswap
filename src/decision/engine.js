@@ -1,9 +1,10 @@
 'use strict'
 
 const debug = require('debug')
-const _ = require('highland')
 const async = require('async')
 const mh = require('multihashes')
+const pull = require('pull-stream')
+const generate = require('pull-generate')
 
 const log = debug('bitswap:engine')
 log.error = debug('bitswap:engine:error')
@@ -45,34 +46,38 @@ module.exports = class Engine {
   _outbox () {
     if (!this._running) return
 
-    const doIt = (cb) => {
-      _((push, next) => {
-        if (!this._running) return push(null, _.nil)
+    const doIt = (cb) => pull(
+      generate(null, (state, cb) => {
+        if (!this._running) {
+          return cb(true)
+        }
+
         const nextTask = this.peerRequestQueue.pop()
 
-        if (!nextTask) return push(null, _.nil)
+        if (!nextTask) {
+          return cb(true)
+        }
 
         this.datastore.get(nextTask.entry.key, (err, block) => {
           if (err || !block) {
             nextTask.done()
-          } else {
-            push(null, {
-              peer: nextTask.target,
-              block: block,
-              sent: () => {
-                nextTask.done()
-              }
-            })
+            return cb()
           }
 
-          next()
+          cb(null, {
+            peer: nextTask.target,
+            block: block,
+            sent: () => {
+              nextTask.done()
+            }
+          })
         })
-      })
-        .flatMap((envelope) => {
-          return _.wrapCallback(this._sendBlock.bind(this))(envelope)
-        })
-        .done(cb)
-    }
+      }),
+      pull.asyncMap((envelope, cb) => {
+        this._sendBlock(envelope, cb)
+      }),
+      pull.onEnd(cb)
+    )
 
     if (!this._timer) {
       this._timer = setTimeout(() => {

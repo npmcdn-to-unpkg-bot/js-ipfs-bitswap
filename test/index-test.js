@@ -1,4 +1,5 @@
 /* eslint-env mocha */
+/* eslint max-nested-callbacks: ["error", 8]*/
 'use strict'
 
 const async = require('async')
@@ -61,18 +62,15 @@ module.exports = (repo) => {
           expect(bs.blocksRecvd).to.be.eql(2)
           expect(bs.dupBlocksRecvd).to.be.eql(0)
 
-          async.parallel([
-            (cb) => store.get(b1.key, (err, res) => {
-              if (err) cb(err)
-              expect(res).to.be.eql(b1)
-              cb()
-            }),
-            (cb) => store.get(b1.key, (err, res) => {
-              if (err) return cb(err)
-              expect(res).to.be.eql(b1)
-              cb()
-            })
-          ], done)
+          async.map([b1, b1],
+            (val, cb) => store.get(val.key, cb),
+            (err, res) => {
+              if (err) return done(err)
+
+              expect(res).to.be.eql([b1, b1])
+              done()
+            }
+          )
         })
       })
 

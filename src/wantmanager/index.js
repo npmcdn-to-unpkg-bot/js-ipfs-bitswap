@@ -1,7 +1,7 @@
 'use strict'
 
 const debug = require('debug')
-const _ = require('highland')
+const pull = require('pull-stream')
 
 const Message = require('../message')
 const Wantlist = require('../wantlist')
@@ -25,12 +25,13 @@ module.exports = class Wantmanager {
 
   _addEntries (keys, cancel, force) {
     let i = -1
-    _(keys)
-      .map((key) => {
+    pull(
+      pull.values(keys),
+      pull.map((key) => {
         i++
         return new Message.Entry(key, cs.kMaxPriority - i, cancel)
-      })
-      .tap((e) => {
+      }),
+      pull.through((e) => {
         // add changes to our wantlist
         if (e.cancel) {
           if (force) {
@@ -41,13 +42,15 @@ module.exports = class Wantmanager {
         } else {
           this.wl.add(e.key, e.priority)
         }
-      })
-      .toArray((entries) => {
+      }),
+      pull.collect((err, entries) => {
+        if (err) throw err
         // broadcast changes
         for (let p of this.peers.values()) {
           p.addEntries(entries, false)
         }
       })
+    )
   }
 
   _startPeerHandler (peerId) {
