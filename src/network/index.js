@@ -52,7 +52,7 @@ module.exports = class Network {
     pull(
       conn,
       lp.decode(),
-      pull.collect((err, data) => {
+      pull.collect((err, msgs) => msgs.forEach((data) => {
         if (err) {
           return this.bitswap._receiveError(err)
         }
@@ -68,7 +68,7 @@ module.exports = class Network {
           }
           this.bitswap._receiveMessage(peerInfo.id, msg)
         })
-      })
+      }))
     )
   }
 

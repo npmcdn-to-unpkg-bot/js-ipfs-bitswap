@@ -41,9 +41,8 @@ function createRepo (id, done) {
     const key = blocks ? file.key.replace(/^blocks\//, '') : file.key
 
     pull(
-      pull.values([key]),
-      blob.write(),
-      pull.onEnd(cb)
+      pull.values([file.value]),
+      blob.write(key, cb)
     )
   }, () => {
     const repo = new IPFSRepo(id, {stores: Store})

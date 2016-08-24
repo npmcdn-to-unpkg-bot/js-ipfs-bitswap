@@ -12,8 +12,7 @@ const Bitswap = require('../src')
 const libp2p = require('libp2p-ipfs')
 const os = require('os')
 const Repo = require('ipfs-repo')
-const bs = require('abstract-blob-store')
-// const bs = require('fs-blob-store')
+const Store = require('interface-pull-blob-store/lib/reference')
 
 exports.mockNetwork = (calls, done) => {
   done = done || (() => {})
@@ -130,7 +129,7 @@ exports.genBitswapNetwork = (n, callback) => {
   const tmpDir = os.tmpdir()
   netArray.forEach((net, i) => {
     const repoPath = tmpDir + '/' + net.peerInfo.id.toB58String()
-    net.repo = new Repo(repoPath, { stores: bs })
+    net.repo = new Repo(repoPath, { stores: Store })
   })
 
   // start every libp2pNode
