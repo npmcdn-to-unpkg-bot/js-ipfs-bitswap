@@ -9,6 +9,8 @@ log.error = debug('bitswap:error')
 const EventEmitter = require('events').EventEmitter
 const mh = require('multihashes')
 const pull = require('pull-stream')
+const merge = require('pull-merge')
+const pushable = require('pull-pushable')
 
 const cs = require('./constants')
 const WantManager = require('./wantmanager')
@@ -134,105 +136,91 @@ module.exports = class Bitwap {
     this.engine.peerDisconnected(peerId)
   }
 
-  // getBlock attempts to retrieve a particular block with key `key` from peers
-  getBlock (key, cb) {
-    const keyS = mh.toB58String(key)
-    log('getBlock.start %s', keyS)
-    const done = (err, block) => {
-      if (err) {
-        log('getBlock.fail %s', keyS)
-        return cb(err)
-      }
-
-      if (!block) {
-        log('getBlock.fail %s', keyS)
-        return cb(new Error('Empty block received'))
-      }
-
-      log('getBlock.end %s', keyS)
-      cb(null, block)
-    }
-
-    this.getBlocks([key], (results) => {
-      const err = results[keyS].error
-      const block = results[keyS].block
-
-      done(err, block)
-    })
-  }
-
   // return the current wantlist for a given `peerId`
   wantlistForPeer (peerId) {
     return this.engine.wantlistForPeer(peerId)
   }
 
-  getBlocks (keys, cb) {
-    const results = {}
+  getStream () {
     const unwantListeners = {}
     const blockListeners = {}
     const unwantEvent = (key) => `unwant:${key}`
     const blockEvent = (key) => `block:${key}`
-
-    const cleanupListeners = () => {
-      keys.forEach((key) => {
-        const keyS = mh.toB58String(key)
-        this.notifications.removeListener(unwantEvent(keyS), unwantListeners[keyS])
-        this.notifications.removeListener(blockEvent(keyS), blockListeners[keyS])
-      })
-    }
-
-    const addListeners = () => {
-      keys.forEach((key) => {
-        const keyS = mh.toB58String(key)
-        unwantListeners[keyS] = () => {
-          finish(keyS, new Error(`manual unwant: ${keyS}`))
-        }
-
-        blockListeners[keyS] = (block) => {
-          finish(keyS, null, block)
-        }
-
-        this.notifications.once(unwantEvent(keyS), unwantListeners[keyS])
-        this.notifications.once(blockEvent(keyS), blockListeners[keyS])
-      })
-    }
+    const pusher = pushable()
 
     let finished = false
-    const finish = (key, err, block) => {
-      results[key] = {
-        error: err,
-        block: block
-      }
 
-      if (Object.keys(results).length === keys.length) {
-        cleanupListeners()
-
-        if (!finished) {
-          cb(results)
-        }
-        finished = true
+    const finish = () => {
+      if (finished && Object.keys(blockListeners).length === 0) {
+        pusher.end()
       }
     }
 
-    addListeners()
-    this.wm.wantBlocks(keys)
+    const cleanupListener = (key) => {
+      const keyS = mh.toB58String(key)
 
-    pull(
-      pull.values(keys),
+      if (unwantListeners[keyS]) {
+        this.notifications.removeListener(unwantEvent(keyS), unwantListeners[keyS])
+        delete unwantListeners[keyS]
+      }
+
+      if (blockListeners[keyS]) {
+        this.notifications.removeListener(blockEvent(keyS), blockListeners[keyS])
+        delete blockListeners[keyS]
+      }
+
+      finish()
+    }
+
+    const addListener = (key) => {
+      const keyS = mh.toB58String(key)
+      unwantListeners[keyS] = () => {
+        log(`manual unwant: ${keyS}`)
+        cleanupListener(key)
+      }
+
+      blockListeners[keyS] = (block) => {
+        pusher.push(block)
+      }
+
+      this.notifications.once(unwantEvent(keyS), unwantListeners[keyS])
+      this.notifications.once(blockEvent(keyS), blockListeners[keyS])
+    }
+
+    const sink = pull(
       pull.asyncMap((key, cb) => {
         this.blockstore.has(key, (err, exists) => {
           cb(err, [key, exists])
         })
       }),
-      pull.filter((val) => val[1]),
-      pull.map((val) => this.blockstore.getStream(val[0])),
+      pull.map((val) => {
+        const key = val[0]
+        const exists = val[1]
+        if (exists) return key
+
+        addListener(key)
+        this.wm.wantBlocks([key])
+      }),
+      pull.filter(Boolean),
+      pull.map((key) => this.blockstore.getStream(key)),
       pull.flatten(),
       pull.through((block) => {
-        finish(mh.toB58String(block.key), null, block)
         this.wm.cancelWants([block.key])
+        pusher.push(block)
       }),
-      pull.drain()
+      pull.onEnd((err) => {
+        finished = true
+        if (err) return pusher.end(err)
+        finish()
+      })
     )
+
+    const source = pull(
+      pusher,
+      pull.through((block) => cleanupListener(block.key))
+    )
+
+    return {source, sink}
   }
 
   // removes the given keys from the want list independent of any ref counts

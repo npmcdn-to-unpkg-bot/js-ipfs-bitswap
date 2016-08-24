@@ -10,31 +10,28 @@
 
 Create a new instance.
 
-### `getBlock(key, cb)`
 
-- `key: Multihash`
-- `cb: Function`
+### `getStream()`
 
-Fetch a single block.
+Returns a duplex `pull-stream`. Values written to it should be
+the keys to fetch, and values emitted are the received blocks.
+They results are not ordered in the same way as they are requested.
+
+Example:
+
+```js
+pull(
+  pull.values([key1, key2]),
+  bitswap.getStream(),
+  pull.collect((err, blocks) => {
+    // blocks === [block1, block2]
+  })
+)
+```
 
 > Note: This is safe guarded so that the network is not asked
 > for blocks that are in the local `datastore`.
 
-### `getBlocks(keys, cb)`
-
-- `keys: []Multihash`
-- `cb: Function`
-
-Fetch multiple blocks. The `cb` is called with a result object of the form
-```js
-{
-  [key1]: {error: errorOrUndefined, block: blockOrUndefined},
-  [key2]: {error: errorOrUndefined, block: blockOrUndefined},
-  ...
-}
-```
-
-Where `key<i>` is the multihash of the block.
 
 ### `unwantBlocks(keys)`
 

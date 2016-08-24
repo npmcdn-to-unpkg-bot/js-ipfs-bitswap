@@ -10,8 +10,9 @@ const each = require('async/each')
 const _ = require('lodash')
 const Block = require('ipfs-block')
 const Buffer = require('safe-buffer').Buffer
+const pull = require('pull-stream')
 
-describe('gen Bitswap network', function () {
+describe.only('gen Bitswap network', function () {
   this.timeout(300 * 1000)
 
   it('retrieves local blocks', (done) => {
@@ -33,13 +34,16 @@ describe('gen Bitswap network', function () {
         },
         (cb) => {
           each(_.range(100), (i, cb) => {
-            parallel(blocks.map((b) => (cb) => {
-              node.bitswap.getBlock(b.key, (err, res) => {
-                expect(err).to.not.exist
-                expect(res).to.be.eql(b)
+            pull(
+              pull.values(blocks),
+              pull.map((block) => block.key),
+              node.bitswap.getStream(),
+              pull.collect((err, res) => {
+                if (err) return cb(err)
+                expect(res).to.have.length(blocks.length)
                 cb()
               })
-            }), cb)
+            )
           }, cb)
         }
       ], (err) => {
@@ -56,9 +60,10 @@ describe('gen Bitswap network', function () {
   const counts = [2, 3, 5]
 
   // TODO: Enable once we figured out why this is failing on CI
-  describe.skip('distributed blocks', () => {
+  describe('distributed blocks', () => {
     counts.forEach((n) => {
       it(`with ${n} nodes`, (done) => {
+        console.log('%s nodes', n)
         utils.genBitswapNetwork(n, (err, nodeArr) => {
           expect(err).to.not.exist
           nodeArr.forEach((node) => {
@@ -72,6 +77,7 @@ describe('gen Bitswap network', function () {
           // -- actual test
 
           const round = (j, cb) => {
+            console.log('  round %s', j)
             const blockFactor = 10
             const blocks = _.range(n * blockFactor).map((k) => {
               const buf = Buffer.alloc(1024)
@@ -86,25 +92,29 @@ describe('gen Bitswap network', function () {
               node.bitswap.start()
               parallel([
                 (finish) => {
+                  console.log('  writing blocks')
                   parallel(_.range(blockFactor).map((j) => (cb) => {
                     // console.log('has node:%s block %s', i, i * blockFactor + j)
                     node.bitswap.hasBlock(blocks[i * blockFactor + j], cb)
                   }), finish)
                 },
                 (finish) => {
-                  parallel(_.map(blocks, (b, j) => (cb) => {
-                    node.bitswap.getBlock(b.key, (err, res) => {
-                      // console.log('node:%s got block: %s', i, j)
-                      expect(err).to.not.exist
-                      expect(res).to.be.eql(b)
-                      cb()
+                  console.log('  fetching blocks')
+                  pull(
+                    pull.values(blocks),
+                    pull.map((block) => block.key),
+                    node.bitswap.getStream(),
+                    pull.collect((err, res) => {
+                      if (err) return finish(err)
+                      expect(res).to.have.length(blocks.length)
+                      finish()
                     })
-                  }), finish)
+                  )
                 }
               ], callback)
             }), (err) => {
               if (err) return cb(err)
-              console.log('time -- %s', (new Date()).getTime() - d)
+              console.log('  time -- %s', (new Date()).getTime() - d)
               cb()
             })
           }

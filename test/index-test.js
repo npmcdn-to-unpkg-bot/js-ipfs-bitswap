@@ -132,7 +132,7 @@ module.exports = (repo) => {
       })
     })
 
-    describe('getBlock', () => {
+    describe('getStream', () => {
       let store
 
       before((done) => {
@@ -159,12 +159,16 @@ module.exports = (repo) => {
             const book = new PeerBook()
             const bs = new Bitswap(me, libp2pMock, store, book)
 
-            bs.getBlock(block.key, (err, res) => {
-              if (err) return done(err)
+            pull(
+              pull.values([block.key]),
+              bs.getStream(),
+              pull.collect((err, res) => {
+                if (err) return done(err)
 
-              expect(res).to.be.eql(block)
-              done()
-            })
+                expect(res).to.be.eql([block])
+                done()
+              })
+            )
           })
         )
       })
@@ -185,7 +189,14 @@ module.exports = (repo) => {
           (val, cb) => {
             mockNet.bitswaps[0]._onPeerConnected(mockNet.ids[1])
             mockNet.bitswaps[1]._onPeerConnected(mockNet.ids[0])
-            mockNet.bitswaps[0].getBlock(block.key, cb)
+            pull(
+              pull.values([block.key]),
+              mockNet.bitswaps[0].getStream(),
+              pull.collect((err, res) => {
+                if (err) return cb(err)
+                cb(null, res[0])
+              })
+            )
           },
           (res, cb) => {
             expect(res).to.be.eql(res)
@@ -205,11 +216,16 @@ module.exports = (repo) => {
         bs.engine.network = net
         bs.start()
 
-        bs.getBlock(block.key, (err, res) => {
-          if (err) throw err
-          expect(res).to.be.eql(block)
-          done()
-        })
+        pull(
+          pull.values([block.key]),
+          bs.getStream(),
+          pull.collect((err, res) => {
+            if (err) throw err
+            expect(res).to.be.eql([block])
+            done()
+          })
+        )
+
         setTimeout(() => {
           bs.hasBlock(block, () => {})
         }, 200)
@@ -273,7 +289,14 @@ module.exports = (repo) => {
             bs2.start()
             bs1._onPeerConnected(other)
             bs2._onPeerConnected(me)
-            bs1.getBlock(block.key, cb)
+            pull(
+              pull.values([block.key]),
+              bs1.getStream(),
+              pull.collect((err, res) => {
+                if (err) return cb(err)
+                cb(null, res[0])
+              })
+            )
 
             setTimeout(() => {
               bs2.hasBlock(block)
@@ -329,16 +352,26 @@ module.exports = (repo) => {
           }
         }
 
-        bs.getBlock(b.key, (err, res) => {
-          expect(err.message).to.be.eql(`manual unwant: ${mh.toB58String(b.key)}`)
-          finish()
-        })
-        bs.getBlock(b.key, (err, res) => {
-          expect(err.message).to.be.eql(`manual unwant: ${mh.toB58String(b.key)}`)
-          finish()
-        })
+        pull(
+          pull.values([b.key]),
+          bs.getStream(),
+          pull.collect((err, res) => {
+            expect(err).to.not.exist
+            expect(res).to.be.empty
+            finish()
+          })
+        )
+        pull(
+          pull.values([b.key]),
+          bs.getStream(),
+          pull.collect((err, res) => {
+            expect(err).to.not.exist
+            expect(res).to.be.empty
+            finish()
+          })
+        )
 
-        bs.unwantBlocks([b.key])
+        setTimeout(() => bs.unwantBlocks([b.key]), 10)
       })
     })
   })
