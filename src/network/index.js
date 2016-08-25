@@ -53,6 +53,7 @@ module.exports = class Network {
       conn,
       lp.decode(),
       pull.collect((err, msgs) => msgs.forEach((data) => {
+        log('raw message', data)
         if (err) {
           return this.bitswap._receiveError(err)
         }
@@ -97,25 +98,24 @@ module.exports = class Network {
   // Send the given msg (instance of Message) to the given peer
   sendMessage (peerId, msg, cb) {
     log('sendMessage to %s', peerId.toB58String())
-    log('msg %s', msg.full, msg.wantlist, msg.blocks)
-    const done = (err) => setImmediate(() => cb(err))
+    log('msg', msg)
     let peerInfo
     try {
       peerInfo = this.peerBook.getByMultihash(peerId.toBytes())
     } catch (err) {
-      return done(err)
+      return cb(err)
     }
 
     this.libp2p.dialByPeerInfo(peerInfo, PROTOCOL_IDENTIFIER, (err, conn) => {
       if (err) {
-        return done(err)
+        return cb(err)
       }
-
       pull(
         pull.values([msg.toProto()]),
         lp.encode(),
         conn
       )
+      cb()
     })
   }
 }

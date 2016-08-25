@@ -99,6 +99,7 @@ module.exports = (repo) => {
           expect(bs.dupBlocksRecvd).to.be.eql(0)
 
           const wl = bs.wantlistForPeer(other)
+
           expect(wl.has(mh.toB58String(b1.key))).to.be.eql(true)
           expect(wl.has(mh.toB58String(b2.key))).to.be.eql(true)
 

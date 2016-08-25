@@ -40,6 +40,7 @@ module.exports = class Wantmanager {
             this.wl.remove(e.key)
           }
         } else {
+          log('adding to wl', e.key, e.priority)
           this.wl.add(e.key, e.priority)
         }
       }),
@@ -68,6 +69,7 @@ module.exports = class Wantmanager {
     for (let entry of this.wl.entries()) {
       fullwantlist.addEntry(entry[1].key, entry[1].priority)
     }
+
     mq.addMessage(fullwantlist)
 
     this.peers.set(peerId.toB58String(), mq)

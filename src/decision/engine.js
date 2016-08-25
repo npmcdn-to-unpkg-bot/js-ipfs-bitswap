@@ -1,7 +1,6 @@
 'use strict'
 
 const debug = require('debug')
-const eachSeries = require('async/eachSeries')
 const mh = require('multihashes')
 const pull = require('pull-stream')
 const generate = require('pull-generate')
@@ -48,12 +47,13 @@ module.exports = class Engine {
 
     const doIt = (cb) => pull(
       generate(null, (state, cb) => {
+        log('generating', this._running)
         if (!this._running) {
           return cb(true)
         }
 
         const nextTask = this.peerRequestQueue.pop()
-
+        log('got task', nextTask)
         if (!nextTask) {
           return cb(true)
         }
@@ -61,10 +61,11 @@ module.exports = class Engine {
         pull(
           this.blockstore.getStream(nextTask.entry.key),
           pull.collect((err, blocks) => {
+            log('generated', blocks)
             const block = blocks[0]
             if (err || !block) {
               nextTask.done()
-              return cb()
+              return cb(null, false)
             }
 
             cb(null, {
@@ -77,6 +78,7 @@ module.exports = class Engine {
           })
         )
       }),
+      pull.filter(Boolean),
       pull.asyncMap(this._sendBlock.bind(this)),
       pull.onEnd(cb)
     )
@@ -104,11 +106,12 @@ module.exports = class Engine {
 
   // Handle incoming messages
   messageReceived (peerId, msg, cb) {
+    const ledger = this._findOrCreate(peerId)
+
     if (msg.empty) {
       log('received empty message from %s', peerId.toB58String())
+      return cb()
     }
-
-    const ledger = this._findOrCreate(peerId)
 
     // If the message was a full wantlist clear the current one
     if (msg.full) {
@@ -117,15 +120,17 @@ module.exports = class Engine {
 
     this._processBlocks(msg.blocks, ledger)
     log('wantlist', Array.from(msg.wantlist.values()).map((e) => e.toString()))
-    eachSeries(
-      msg.wantlist.values(),
-      this._processWantlist.bind(this, ledger, peerId),
-      (err) => {
-        const done = (err) => setImmediate(() => cb(err))
-        if (err) return done(err)
+
+    pull(
+      pull.values(Array.from(msg.wantlist.values())),
+      pull.asyncMap((entry, cb) => {
+        this._processWantlist(ledger, peerId, entry, cb)
+      }),
+      pull.onEnd((err) => {
+        if (err) return cb(err)
         this._outbox()
-        done()
-      }
+        cb()
+      })
     )
   }
 

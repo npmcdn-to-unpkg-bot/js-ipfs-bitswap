@@ -6,10 +6,10 @@ const PeerId = require('peer-id')
 const _ = require('lodash')
 const Block = require('ipfs-block')
 const parallel = require('async/parallel')
-const eachLimit = require('async/eachLimit')
 const series = require('async/series')
 const eachSeries = require('async/eachSeries')
 const pull = require('pull-stream')
+const paramap = require('pull-paramap')
 
 const Message = require('../../src/message')
 const Engine = require('../../src/decision/engine')
@@ -45,41 +45,45 @@ module.exports = (repo) => {
         const sender = res[0]
         const receiver = res[1]
 
-        eachLimit(_.range(1000), 100, (i, cb) => {
-          const m = new Message(false)
-          const content = `this is message ${i}`
-          m.addBlock(new Block(content))
-          sender.engine.messageSent(receiver.peer, m)
-          receiver.engine.messageReceived(sender.peer, m, cb)
-        }, (err) => {
-          expect(err).to.not.exist
+        pull(
+          pull.values(_.range(1000)),
+          paramap((i, cb) => {
+            const m = new Message(false)
+            const content = `this is message ${i}`
+            m.addBlock(new Block(content))
+            sender.engine.messageSent(receiver.peer, m)
+            receiver.engine.messageReceived(sender.peer, m, cb)
+          }, 100),
+          pull.onEnd((err) => {
+            expect(err).to.not.exist
 
-          expect(
-            sender.engine.numBytesSentTo(receiver.peer)
-          ).to.be.above(
-            0
-          )
+            expect(
+              sender.engine.numBytesSentTo(receiver.peer)
+            ).to.be.above(
+              0
+            )
 
-          expect(
-            sender.engine.numBytesSentTo(receiver.peer)
-          ).to.be.eql(
-            receiver.engine.numBytesReceivedFrom(sender.peer)
-          )
+            expect(
+              sender.engine.numBytesSentTo(receiver.peer)
+            ).to.be.eql(
+              receiver.engine.numBytesReceivedFrom(sender.peer)
+            )
 
-          expect(
-            receiver.engine.numBytesSentTo(sender.peer)
-          ).to.be.eql(
-            0
-          )
+            expect(
+              receiver.engine.numBytesSentTo(sender.peer)
+            ).to.be.eql(
+              0
+            )
 
-          expect(
-            sender.engine.numBytesReceivedFrom(receiver.peer)
-          ).to.be.eql(
-            0
-          )
+            expect(
+              sender.engine.numBytesReceivedFrom(receiver.peer)
+            ).to.be.eql(
+              0
+            )
 
-          done()
-        })
+            done()
+          })
+        )
       })
     })
 

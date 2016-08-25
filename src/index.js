@@ -1,6 +1,5 @@
 'use strict'
 
-const eachLimit = require('async/eachLimit')
 const series = require('async/series')
 const retry = require('async/retry')
 const debug = require('debug')
@@ -9,8 +8,8 @@ log.error = debug('bitswap:error')
 const EventEmitter = require('events').EventEmitter
 const mh = require('multihashes')
 const pull = require('pull-stream')
-const merge = require('pull-merge')
 const pushable = require('pull-pushable')
+const paramap = require('pull-paramap')
 
 const cs = require('./constants')
 const WantManager = require('./wantmanager')
@@ -50,45 +49,54 @@ module.exports = class Bitwap {
         log('failed to receive message', incoming)
       }
 
-      const iblocks = incoming.blocks
+      const iblocks = Array.from(incoming.blocks.values())
 
-      if (iblocks.size === 0) {
+      if (iblocks.length === 0) {
         return cb()
       }
 
       // quickly send out cancels, reduces chances of duplicate block receives
-      const keys = []
-      for (let block of iblocks.values()) {
-        const found = this.wm.wl.contains(block.key)
-        if (!found) {
-          log('received un-askes-for %s from %s', mh.toB58String(block.key), peerId.toB58String())
-        } else {
-          keys.push(block.key)
-        }
-      }
 
-      this.wm.cancelWants(keys)
+      pull(
+        pull.values(iblocks),
+        pull.map((block) => block.key),
+        pull.filter((key) => this.wm.wl.contains(key)),
+        pull.collect((err, keys) => {
+          if (err) {
+            return log.error(err)
+          }
+          this.wm.cancelWants(keys)
+        })
+      )
 
-      eachLimit(iblocks.values(), 10, (block, next) => {
-        series([
-          (innerCb) => this._updateReceiveCounters(block, (err) => {
-            if (err) {
-              // ignore, as these have been handled in _updateReceiveCounters
-              return innerCb()
-            }
-
-            log('got block from %s', peerId.toB58String(), block.data.toString())
-            innerCb()
-          }),
-          (innerCb) => this.hasBlock(block, (err) => {
-            if (err) {
-              log.error('receiveMessage hasBlock error: %s', err.message)
-            }
-            innerCb()
-          })
-        ], next)
-      }, cb)
+      pull(
+        pull.values(iblocks),
+        paramap(this._handleReceivedBlock.bind(this, peerId), 10),
+        pull.onEnd(cb)
+      )
     })
+  }
+
+  _handleReceivedBlock (peerId, block, cb) {
+    log('handling block', block)
+    series([
+      (cb) => this._updateReceiveCounters(block, (err) => {
+        if (err) {
+          // ignore, as these have been handled
+          // in _updateReceiveCounters
+          return cb()
+        }
+
+        log('got block from %s', peerId.toB58String(), block.data.toString())
+        cb()
+      }),
+      (cb) => this.hasBlock(block, (err) => {
+        if (err) {
+          log.error('receiveMessage hasBlock error: %s', err.message)
+        }
+        cb()
+      })
+    ], cb)
   }
 
   _updateReceiveCounters (block, cb) {
@@ -176,10 +184,12 @@ module.exports = class Bitwap {
       const keyS = mh.toB58String(key)
       unwantListeners[keyS] = () => {
         log(`manual unwant: ${keyS}`)
+        this.wm.cancelWants([key])
         cleanupListener(key)
       }
 
       blockListeners[keyS] = (block) => {
+        this.wm.cancelWants([block.key])
         pusher.push(block)
       }
 
@@ -205,7 +215,6 @@ module.exports = class Bitwap {
       pull.map((key) => this.blockstore.getStream(key)),
       pull.flatten(),
       pull.through((block) => {
-        this.wm.cancelWants([block.key])
         pusher.push(block)
       }),
       pull.onEnd((err) => {
@@ -240,15 +249,21 @@ module.exports = class Bitwap {
   hasBlock (block, cb) {
     cb = cb || (() => {})
 
-    this._tryPutBlock(block, 4, (err) => {
-      if (err) {
-        log.error('Error writing block to blockstore: %s', err.message)
-        return cb(err)
-      }
-      log('put block: %s', mh.toB58String(block.key))
-      this.notifications.emit(`block:${mh.toB58String(block.key)}`, block)
-      this.engine.receivedBlock(block)
-      cb()
+    this.blockstore.has(block.key, (err, exists) => {
+      if (err) return cb(err)
+      if (exists) return cb()
+
+      this._tryPutBlock(block, 4, (err) => {
+        if (err) {
+          log.error('Error writing block to blockstore: %s', err.message)
+          return cb(err)
+        }
+
+        log('put block: %s', mh.toB58String(block.key))
+        this.notifications.emit(`block:${mh.toB58String(block.key)}`, block)
+        this.engine.receivedBlock(block)
+        cb()
+      })
     })
   }
 
