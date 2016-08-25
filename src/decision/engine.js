@@ -134,15 +134,15 @@ module.exports = class Engine {
     )
   }
 
-  receivedBlock (block) {
-    this._processBlock(block)
+  receivedBlock (key) {
+    this._processBlock(key)
     this._outbox()
   }
 
-  _processBlock (block) {
+  _processBlock (key) {
     // Check all connected peers if they want the block we received
     for (let l of this.ledgerMap.values()) {
-      const entry = l.wantlistContains(block.key)
+      const entry = l.wantlistContains(key)
 
       if (entry) {
         this.peerRequestQueue.push(entry, l.partner)
@@ -178,7 +178,7 @@ module.exports = class Engine {
       log('got block %s (%s bytes)', mh.toB58String(block.key), block.data.length)
       ledger.receivedBytes(block.data.length)
 
-      this.receivedBlock(block)
+      this.receivedBlock(block.key)
     }
   }
 

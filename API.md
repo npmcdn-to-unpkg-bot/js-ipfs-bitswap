@@ -11,20 +11,19 @@
 Create a new instance.
 
 
-### `getStream()`
+### `getStream(key)`
 
-Returns a duplex `pull-stream`. Values written to it should be
-the keys to fetch, and values emitted are the received blocks.
-They results are not ordered in the same way as they are requested.
+- `key: Multihash`
+
+Returns a source `pull-stream`. Values emitted are the received blocks.
 
 Example:
 
 ```js
 pull(
-  pull.values([key1, key2]),
-  bitswap.getStream(),
+  bitswap.getStream(key),
   pull.collect((err, blocks) => {
-    // blocks === [block1, block2]
+    // blocks === [block]
   })
 )
 ```
@@ -47,6 +46,9 @@ attached to `getBlock` are errored with `Error('manual unwant: key')`.
 
 Cancel previously requested keys.
 
+### `putStream()`
+
+Returns a duplex `pull-stream` that emits an object `{key: Multihash}` for every written block when it was stored.
 
 ### `hasBlock(block, cb)`
 

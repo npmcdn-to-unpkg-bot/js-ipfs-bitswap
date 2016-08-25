@@ -28,16 +28,20 @@ describe('gen Bitswap network', function () {
 
       series([
         (cb) => {
-          parallel(blocks.map((b) => (cb) => {
-            node.bitswap.hasBlock(b, cb)
-          }), cb)
+          pull(
+            pull.values(blocks),
+            node.bitswap.putStream(),
+            pull.onEnd(cb)
+          )
         },
         (cb) => {
           each(_.range(100), (i, cb) => {
             pull(
               pull.values(blocks),
-              pull.map((block) => block.key),
-              node.bitswap.getStream(),
+              pull.map((block) => (
+                node.bitswap.getStream(block.key)
+              )),
+              pull.flatten(),
               pull.collect((err, res) => {
                 if (err) return cb(err)
                 expect(res).to.have.length(blocks.length)
@@ -57,10 +61,10 @@ describe('gen Bitswap network', function () {
   })
 
   // const counts = [2, 3, 4, 5, 10]
-  const counts = [2, 3, 5]
+  const counts = [2, 3]
 
   // TODO: Enable once we figured out why this is failing on CI
-  describe.skip('distributed blocks', () => {
+  describe('distributed blocks', () => {
     counts.forEach((n) => {
       it(`with ${n} nodes`, (done) => {
         utils.genBitswapNetwork(n, (err, nodeArr) => {
@@ -90,15 +94,22 @@ describe('gen Bitswap network', function () {
               node.bitswap.start()
               parallel([
                 (finish) => {
-                  parallel(_.range(blockFactor).map((j) => (cb) => {
-                    node.bitswap.hasBlock(blocks[i * blockFactor + j], cb)
-                  }), finish)
+                  pull(
+                    pull.values(
+                      _.range(blockFactor)
+                    ),
+                    pull.map((j) => blocks[i * blockFactor + j]),
+                    node.bitswap.putStream(),
+                    pull.onEnd(finish)
+                  )
                 },
                 (finish) => {
                   pull(
                     pull.values(blocks),
-                    pull.map((block) => block.key),
-                    node.bitswap.getStream(),
+                    pull.map((block) => (
+                      node.bitswap.getStream(block.key)
+                    )),
+                    pull.flatten(),
                     pull.collect((err, res) => {
                       if (err) return finish(err)
                       expect(res).to.have.length(blocks.length)

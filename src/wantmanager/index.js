@@ -2,6 +2,7 @@
 
 const debug = require('debug')
 const pull = require('pull-stream')
+const mh = require('multihashes')
 
 const Message = require('../message')
 const Wantlist = require('../wantlist')
@@ -40,7 +41,7 @@ module.exports = class Wantmanager {
             this.wl.remove(e.key)
           }
         } else {
-          log('adding to wl', e.key, e.priority)
+          log('adding to wl', mh.toB58String(e.key), e.priority)
           this.wl.add(e.key, e.priority)
         }
       }),
@@ -95,19 +96,19 @@ module.exports = class Wantmanager {
 
   // add all the keys to the wantlist
   wantBlocks (keys) {
-    log('want blocks:', keys)
+    log('want blocks:', keys.map((k) => mh.toB58String(k)))
     this._addEntries(keys, false)
   }
 
   // remove blocks of all the given keys without respecting refcounts
   unwantBlocks (keys) {
-    log('unwant blocks:', keys)
+    log('unwant blocks:', keys.map((k) => mh.toB58String(k)))
     this._addEntries(keys, true, true)
   }
 
   // cancel wanting all of the given keys
   cancelWants (keys) {
-    log('cancel wants: ', keys)
+    log('cancel wants: ', keys.map((k) => mh.toB58String(k)))
     this._addEntries(keys, true)
   }
 

@@ -161,8 +161,7 @@ module.exports = (repo) => {
             const bs = new Bitswap(me, libp2pMock, store, book)
 
             pull(
-              pull.values([block.key]),
-              bs.getStream(),
+              bs.getStream(block.key),
               pull.collect((err, res) => {
                 if (err) return done(err)
 
@@ -191,8 +190,7 @@ module.exports = (repo) => {
             mockNet.bitswaps[0]._onPeerConnected(mockNet.ids[1])
             mockNet.bitswaps[1]._onPeerConnected(mockNet.ids[0])
             pull(
-              pull.values([block.key]),
-              mockNet.bitswaps[0].getStream(),
+              mockNet.bitswaps[0].getStream(block.key),
               pull.collect((err, res) => {
                 if (err) return cb(err)
                 cb(null, res[0])
@@ -218,8 +216,7 @@ module.exports = (repo) => {
         bs.start()
 
         pull(
-          pull.values([block.key]),
-          bs.getStream(),
+          bs.getStream(block.key),
           pull.collect((err, res) => {
             if (err) throw err
             expect(res).to.be.eql([block])
@@ -291,8 +288,7 @@ module.exports = (repo) => {
             bs1._onPeerConnected(other)
             bs2._onPeerConnected(me)
             pull(
-              pull.values([block.key]),
-              bs1.getStream(),
+              bs1.getStream(block.key),
               pull.collect((err, res) => {
                 if (err) return cb(err)
                 cb(null, res[0])
@@ -354,8 +350,7 @@ module.exports = (repo) => {
         }
 
         pull(
-          pull.values([b.key]),
-          bs.getStream(),
+          bs.getStream(b.key),
           pull.collect((err, res) => {
             expect(err).to.not.exist
             expect(res).to.be.empty
@@ -363,8 +358,7 @@ module.exports = (repo) => {
           })
         )
         pull(
-          pull.values([b.key]),
-          bs.getStream(),
+          bs.getStream(b.key),
           pull.collect((err, res) => {
             expect(err).to.not.exist
             expect(res).to.be.empty
