@@ -253,7 +253,7 @@ module.exports = (repo) => {
         )
 
         setTimeout(() => {
-          bs.hasBlock(block, () => {})
+          bs.put(block, () => {})
         }, 200)
       })
 
@@ -324,7 +324,7 @@ module.exports = (repo) => {
             )
 
             setTimeout(() => {
-              bs2.hasBlock(block)
+              bs2.put(block)
             }, 1000)
           },
           (res, cb) => {

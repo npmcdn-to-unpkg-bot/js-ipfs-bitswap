@@ -90,9 +90,9 @@ module.exports = class Bitwap {
         log('got block from %s', peerId.toB58String(), block.data.toString())
         cb()
       }),
-      (cb) => this.hasBlock(block, (err) => {
+      (cb) => this.put(block, (err) => {
         if (err) {
-          log.error('receiveMessage hasBlock error: %s', err.message)
+          log.error('receiveMessage put error: %s', err.message)
         }
         cb()
       })
@@ -269,7 +269,7 @@ module.exports = class Bitwap {
   }
 
   // announces the existance of a block to this service
-  hasBlock (block, cb) {
+  put (block, cb) {
     pull(
       pull.values([block]),
       this.putStream(),

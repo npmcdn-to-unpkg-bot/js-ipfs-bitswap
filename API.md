@@ -60,7 +60,7 @@ Cancel previously requested keys.
 
 Returns a duplex `pull-stream` that emits an object `{key: Multihash}` for every written block when it was stored.
 
-### `hasBlock(block, cb)`
+### `put(block, cb)`
 
 - `block: IpfsBlock`
 - `cb: Function`
