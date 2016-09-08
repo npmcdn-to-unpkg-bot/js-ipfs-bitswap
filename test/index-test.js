@@ -1,5 +1,5 @@
 /* eslint-env mocha */
-/* eslint max-nested-callbacks: ["error", 8]*/
+/* eslint max-nested-callbacks: ["error", 8] */
 'use strict'
 
 const eachSeries = require('async/eachSeries')
@@ -173,6 +173,34 @@ module.exports = (repo) => {
         )
       })
 
+      it('blocks exist locally', (done) => {
+        const me = PeerId.create({bits: 64})
+        const b1 = makeBlock()
+        const b2 = makeBlock()
+        const b3 = makeBlock()
+
+        pull(
+          pull.values([b1, b2, b3]),
+          store.putStream(),
+          pull.onEnd((err) => {
+            if (err) return done(err)
+
+            const book = new PeerBook()
+            const bs = new Bitswap(me, libp2pMock, store, book)
+
+            pull(
+              bs.getStream([b1.key, b2.key, b3.key]),
+              pull.collect((err, res) => {
+                if (err) return done(err)
+
+                expect(res).to.be.eql([b1, b2, b3])
+                done()
+              })
+            )
+          })
+        )
+      })
+
       // Not sure if I understand what is going on here
       // test fails because now the network is not properly mocked
       // what are these net.stores and mockNet.bitswaps?
@@ -321,7 +349,7 @@ module.exports = (repo) => {
       })
     })
 
-    describe('unwantBlocks', () => {
+    describe('unwant', () => {
       let store
       beforeEach((done) => {
         repo.create('hello', (err, r) => {
@@ -366,7 +394,7 @@ module.exports = (repo) => {
           })
         )
 
-        setTimeout(() => bs.unwantBlocks([b.key]), 10)
+        setTimeout(() => bs.unwant(b.key), 10)
       })
     })
   })

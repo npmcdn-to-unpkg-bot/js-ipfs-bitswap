@@ -149,7 +149,24 @@ module.exports = class Bitwap {
     return this.engine.wantlistForPeer(peerId)
   }
 
-  getStream (key) {
+  getStream (keys) {
+    if (!Array.isArray(keys)) {
+      return this._getStreamSingle(keys)
+    }
+
+    return pull(
+      pull.values(keys),
+      paramap((key, cb) => {
+        pull(
+          this._getStreamSingle(key),
+          pull.collect(cb)
+        )
+      }),
+      pull.flatten()
+    )
+  }
+
+  _getStreamSingle (key) {
     const unwantListeners = {}
     const blockListeners = {}
     const unwantEvent = (key) => `unwant:${key}`
@@ -205,7 +222,11 @@ module.exports = class Bitwap {
   }
 
   // removes the given keys from the want list independent of any ref counts
-  unwantBlocks (keys) {
+  unwant (keys) {
+    if (!Array.isArray(keys)) {
+      keys = [keys]
+    }
+
     this.wm.unwantBlocks(keys)
     keys.forEach((key) => {
       this.notifications.emit(`unwant:${mh.toB58String(key)}`)
@@ -214,6 +235,9 @@ module.exports = class Bitwap {
 
   // removes the given keys from the want list
   cancelWants (keys) {
+    if (!Array.isArray(keys)) {
+      keys = [keys]
+    }
     this.wm.cancelWants(keys)
   }
 

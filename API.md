@@ -13,28 +13,38 @@ Create a new instance.
 
 ### `getStream(key)`
 
-- `key: Multihash`
+- `key: Multihash|Array`
 
 Returns a source `pull-stream`. Values emitted are the received blocks.
 
 Example:
 
 ```js
+// Single block
 pull(
   bitswap.getStream(key),
   pull.collect((err, blocks) => {
     // blocks === [block]
   })
 )
+
+// Many blocks
+pull(
+  bitswap.getStream([key1, key2, key3]),
+  pull.collect((err, blocks) => {
+    // blocks === [block1, block2, block3]
+  })
+)
 ```
+
 
 > Note: This is safe guarded so that the network is not asked
 > for blocks that are in the local `datastore`.
 
 
-### `unwantBlocks(keys)`
+### `unwant(keys)`
 
-- `keys: []Multihash`
+- `keys: Mutlihash|[]Multihash`
 
 Cancel previously requested keys, forcefully. That means they are removed from the
 wantlist independent of how many other resources requested these keys. Callbacks
@@ -42,7 +52,7 @@ attached to `getBlock` are errored with `Error('manual unwant: key')`.
 
 ### `cancelWants(keys)`
 
-- `keys: []Multihash`
+- `keys: Multihash|[]Multihash`
 
 Cancel previously requested keys.
 

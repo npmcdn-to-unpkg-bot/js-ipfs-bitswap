@@ -1,5 +1,5 @@
 /* eslint-env mocha */
-/* eslint max-nested-callbacks: ["error", 8]*/
+/* eslint max-nested-callbacks: ["error", 8] */
 'use strict'
 
 const expect = require('chai').expect
@@ -37,11 +37,9 @@ describe('gen Bitswap network', function () {
         (cb) => {
           each(_.range(100), (i, cb) => {
             pull(
-              pull.values(blocks),
-              pull.map((block) => (
-                node.bitswap.getStream(block.key)
-              )),
-              pull.flatten(),
+              node.bitswap.getStream(
+                blocks.map((b) => b.key)
+              ),
               pull.collect((err, res) => {
                 if (err) return cb(err)
                 expect(res).to.have.length(blocks.length)
@@ -63,7 +61,6 @@ describe('gen Bitswap network', function () {
   // const counts = [2, 3, 4, 5, 10]
   const counts = [2, 3]
 
-  // TODO: Enable once we figured out why this is failing on CI
   describe('distributed blocks', () => {
     counts.forEach((n) => {
       it(`with ${n} nodes`, (done) => {
@@ -105,11 +102,9 @@ describe('gen Bitswap network', function () {
                 },
                 (finish) => {
                   pull(
-                    pull.values(blocks),
-                    pull.map((block) => (
-                      node.bitswap.getStream(block.key)
-                    )),
-                    pull.flatten(),
+                    node.bitswap.getStream(
+                      blocks.map((b) => b.key)
+                    ),
                     pull.collect((err, res) => {
                       if (err) return finish(err)
                       expect(res).to.have.length(blocks.length)
